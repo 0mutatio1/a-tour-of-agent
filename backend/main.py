@@ -81,9 +81,9 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         nonlocal client, model_name
-        api_key = 'sk-dfae6fa3fdb5478282e76aa424986f57' # os.environ.get("OPENAI_API_KEY", "").strip()
-        base_url = 'https://ws-snruzkqql7qx76wo.cn-beijing.maas.aliyuncs.com/compatible-mode/v1' #os.environ.get("OPENAI_BASE_URL", "").strip()
-        configured_model = 'qwen3.7-max' #os.environ.get("OPENAI_MODEL", "").strip()
+        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
+        configured_model = os.environ.get("OPENAI_MODEL", "").strip()
         if not api_key or not configured_model:
             raise RuntimeError("OPENAI_API_KEY and OPENAI_MODEL must be set")
 
