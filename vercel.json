@@ -2,7 +2,6 @@
   "installCommand": "npm install --prefix frontend",
   "buildCommand": "npm run build --prefix frontend",
   "outputDirectory": "frontend/dist",
-  "nodeVersion": "22.x",
   "functions": {
     "api/index.py": {
       "maxDuration": 300
