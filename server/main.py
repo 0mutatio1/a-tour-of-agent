@@ -2,7 +2,7 @@
 
 import json
 import os
-from collections.abc import AsyncIterator, AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -86,9 +86,10 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         nonlocal client, model_name
-        api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
-        configured_model = os.environ.get("OPENAI_MODEL", "").strip()
+        api_key = 'sk-dfae6fa3fdb5478282e76aa424986f57' # os.environ.get("OPENAI_API_KEY", "").strip()
+        base_url = 'https://ws-snruzkqql7qx76wo.cn-beijing.maas.aliyuncs.com/compatible-mode/v1' #os.environ.get("OPENAI_BASE_URL", "").strip()
+        configured_model = 'qwen3.7-max' #os.environ.get("OPENAI_MODEL", "").strip()
+        
         if not api_key or not configured_model:
             raise RuntimeError("OPENAI_API_KEY and OPENAI_MODEL must be set")
 
@@ -124,13 +125,17 @@ def create_app() -> FastAPI:
         if not messages:
             raise HTTPException(status_code=422, detail="messages must not be empty")
         for message in messages:
-            if message.get("role") not in {"user", "assistant"} or not message.get("content"):
-                raise HTTPException(status_code=422, detail="messages must have role and content")
+            if message.get("role") not in {"user", "assistant"} or not message.get(
+                "content"
+            ):
+                raise HTTPException(
+                    status_code=422, detail="messages must have role and content"
+                )
         if client is None or model_name is None:
             raise HTTPException(status_code=503, detail="OpenAI client is unavailable")
 
         conversation: ResponseInputParam = [
-            { "role": "system", "content": SYSTEM_PROMPT },
+            {"role": "system", "content": SYSTEM_PROMPT},
             *messages,
         ]
         try:
@@ -171,7 +176,11 @@ def create_app() -> FastAPI:
                                 ).encode()
                             elif event.type == "response.completed":
                                 completed_response = event.response
-                            elif event.type in {"error", "response.failed", "response.incomplete"}:
+                            elif event.type in {
+                                "error",
+                                "response.failed",
+                                "response.incomplete",
+                            }:
                                 payload = json.dumps({"error": "Model response failed"})
                                 yield f"event: error\ndata: {payload}\n\n".encode()
                                 yield b"data: [DONE]\n\n"
@@ -189,7 +198,9 @@ def create_app() -> FastAPI:
                     return
 
                 function_calls = [
-                    item for item in completed_response.output if item.type == "function_call"
+                    item
+                    for item in completed_response.output
+                    if item.type == "function_call"
                 ]
                 if not function_calls:
                     print(flush=True)
@@ -209,7 +220,9 @@ def create_app() -> FastAPI:
                         FunctionCallOutput(
                             type="function_call_output",
                             call_id=function_call.call_id,
-                            output=execute_tool(function_call.name, function_call.arguments),
+                            output=execute_tool(
+                                function_call.name, function_call.arguments
+                            ),
                         )
                     )
 

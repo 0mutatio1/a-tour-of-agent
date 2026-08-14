@@ -8,13 +8,11 @@ export interface Message {
   content: string;
 }
 
-const CHAT_API_URL = process.env.VITE_CHAT_API_URL?.trim() || "/api/chat";
-
 export async function* streamChat(
   messages: Message[],
   signal: AbortSignal,
 ): AsyncGenerator<ChatChunk, void, void> {
-  const response = await fetch(CHAT_API_URL, {
+  const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),

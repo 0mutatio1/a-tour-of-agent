@@ -1,8 +1,5 @@
-"""Vercel entrypoint that exposes the backend FastAPI app."""
+"""Vercel entrypoint for the same-origin FastAPI application."""
 
-import sys
-from pathlib import Path
+from server.main import app
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from backend.main import app  # noqa: E402
+__all__ = ["app"]
