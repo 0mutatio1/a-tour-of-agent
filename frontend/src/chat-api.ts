@@ -8,7 +8,7 @@ export interface Message {
   content: string;
 }
 
-const CHAT_API_URL = import.meta.env.VITE_CHAT_API_URL?.trim() || "/api/chat";
+const CHAT_API_URL = process.env.VITE_CHAT_API_URL?.trim() || "/api/chat";
 
 export async function* streamChat(
   messages: Message[],
