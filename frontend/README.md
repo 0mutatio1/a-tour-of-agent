@@ -27,6 +27,25 @@ npm run dev
 
 Vite proxies `POST /api/chat` to `http://127.0.0.1:8000`. The interface targets desktop web viewports at least 1024 pixels wide.
 
+## Deploy to Vercel
+
+Deploy `backend` first, then create a second Vercel project whose Root Directory
+is `frontend`. Keep the Vite framework preset and add this environment variable
+for Production and Preview before deploying:
+
+```sh
+VITE_CHAT_API_URL=https://your-backend.vercel.app/api/chat
+```
+
+Also set the backend project's `FRONTEND_ORIGINS` to this frontend deployment's
+origin, for example `https://your-frontend.vercel.app`, then redeploy the
+backend. `VITE_CHAT_API_URL` is embedded during the Vite build, so redeploy the
+frontend whenever it changes.
+
+The relative `/api/chat` fallback remains for local development only. Vite's
+development proxy is not part of the production bundle, which is why a frontend
+deployment without `VITE_CHAT_API_URL` returns a Vercel 404.
+
 ## Commands
 
 ```sh

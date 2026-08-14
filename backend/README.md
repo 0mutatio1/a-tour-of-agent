@@ -15,6 +15,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 export OPENAI_API_KEY="your-api-key"
 export OPENAI_MODEL="a-model-you-can-access"
+export FRONTEND_ORIGINS="https://your-frontend.vercel.app"
 ```
 
 Set `OPENAI_BASE_URL` only when using an OpenAI-compatible provider endpoint.
@@ -44,3 +45,19 @@ answer text are streamed separately using their native event names:
 
 Both event payloads use `data: {"delta":"..."}`. The final frame is
 `data: [DONE]`.
+
+## Deploy to Vercel
+
+Create a Vercel project whose Root Directory is `backend`. Vercel loads the
+FastAPI application through `index.py`; do not set a build command or output
+directory. Add these project environment variables for Production and Preview:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_BASE_URL` when using a compatible provider
+- `FRONTEND_ORIGINS`, as a comma-separated list of allowed frontend origins
+
+After deploying, the endpoint is
+`https://your-backend.vercel.app/api/chat`. A browser GET will return `405`
+because the endpoint intentionally accepts only POST requests; `404` means the
+backend project or request URL is not configured correctly.

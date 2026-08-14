@@ -8,11 +8,13 @@ export interface Message {
   content: string;
 }
 
+const CHAT_API_URL = import.meta.env.VITE_CHAT_API_URL?.trim() || "/api/chat";
+
 export async function* streamChat(
   messages: Message[],
   signal: AbortSignal,
 ): AsyncGenerator<ChatChunk, void, void> {
-  const response = await fetch("/api/chat", {
+  const response = await fetch(CHAT_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
@@ -20,7 +22,7 @@ export async function* streamChat(
   });
 
   if (!response.ok || response.body === null) {
-    throw new Error("Chat request failed");
+    throw new Error(`Chat request failed (${response.status})`);
   }
 
   const reader = response.body.getReader();

@@ -34,13 +34,17 @@ describe("streamChat", () => {
       { type: "thinking", text: "Checking" },
       { type: "answer", text: "Answer" },
     ]);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/chat",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("fails for HTTP and streamed provider errors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
     await expect(
       streamChat([{ role: "user", content: "Hi" }], new AbortController().signal).next(),
-    ).rejects.toThrow("Chat request failed");
+    ).rejects.toThrow("Chat request failed (500)");
 
     const body = new ReadableStream({
       start(controller) {

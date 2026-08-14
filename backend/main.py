@@ -16,7 +16,7 @@ from openai.types.responses.response_function_tool_call_param import (
 )
 from openai.types.responses.response_input_param import FunctionCallOutput
 
-ALLOWED_ORIGINS = (
+LOCAL_ALLOWED_ORIGINS = (
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 )
@@ -77,6 +77,11 @@ def create_app() -> FastAPI:
     """Create the FastAPI application and its shared OpenAI client."""
     client: AsyncOpenAI | None = None
     model_name: str | None = None
+    deployed_origins = tuple(
+        origin.strip().rstrip("/")
+        for origin in os.environ.get("FRONTEND_ORIGINS", "").split(",")
+        if origin.strip()
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
@@ -106,7 +111,7 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=list(ALLOWED_ORIGINS),
+        allow_origins=list(dict.fromkeys((*LOCAL_ALLOWED_ORIGINS, *deployed_origins))),
         allow_credentials=False,
         allow_methods=["POST"],
         allow_headers=["Content-Type"],
