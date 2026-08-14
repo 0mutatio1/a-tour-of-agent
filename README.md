@@ -37,7 +37,7 @@ preset. Leave Root Directory empty. Add `OPENAI_API_KEY` and `OPENAI_MODEL` as
 Production and Preview environment variables. Add `OPENAI_BASE_URL` when using
 an OpenAI-compatible provider.
 
-Vercel builds `api/index.py` as the same project's Python function, so the
+Vercel builds `api/chat.py` as the same project's Python function, so the
 browser's `POST /api/chat` request stays on the deployment's own origin. No
 frontend API URL or cross-origin configuration is required.
 
@@ -64,7 +64,7 @@ selection, multi-turn model context, or Axios dependency.
 
 ```text
 api/
-  index.py           Vercel FastAPI entrypoint
+  chat.py            Vercel FastAPI entrypoint
 server/
   main.py            streamed chat endpoint and tool loop
 src/
