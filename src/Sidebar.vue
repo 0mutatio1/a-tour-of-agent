@@ -1,13 +1,26 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import { useChatStore } from "./chat";
 import Icon from "./Icon.vue";
 import { useUiStore } from "./ui";
 
 const router = useRouter();
+const chatStore = useChatStore();
 const uiStore = useUiStore();
 const userCard = ref<HTMLElement | null>(null);
+const historyOpen = ref(true);
+const historySections = computed(() =>
+  [
+    { label: "Today", conversations: chatStore.historyGroups.today },
+    { label: "Yesterday", conversations: chatStore.historyGroups.yesterday },
+    { label: "Earlier", conversations: chatStore.historyGroups.earlier },
+  ].filter((section) => section.conversations.length > 0),
+);
+const activeConversationId = computed(() =>
+  router.currentRoute.value.name === "chat" ? chatStore.activeConversationId : null,
+);
 
 function startNewChat(): void {
   uiStore.startNewChat();
@@ -19,6 +32,11 @@ function startNewChat(): void {
 function openSettings(): void {
   uiStore.closeUserMenu();
   void router.push({ name: "settings" });
+}
+
+function openConversation(conversationId: string): void {
+  uiStore.closeUserMenu();
+  void router.push({ name: "chat", params: { conversationId } });
 }
 
 function logOut(): void {
@@ -103,10 +121,64 @@ onBeforeUnmount(() => {
           <Icon name="new-chat" :size="23" />
           <span>New chat</span>
         </button>
+        <button
+          class="sidebar-action"
+          :class="{ 'sidebar-action--compact': uiStore.sidebarCollapsed }"
+          type="button"
+          aria-label="Search messages"
+          :title="uiStore.sidebarCollapsed ? 'Search messages' : undefined"
+          data-search-trigger
+          @click="uiStore.openSearch"
+        >
+          <Icon name="search" :size="23" />
+          <span>Search</span>
+        </button>
       </nav>
     </div>
 
-    <div class="app-sidebar__spacer"></div>
+    <section class="sidebar-history">
+      <div
+        v-if="!uiStore.sidebarCollapsed"
+        class="sidebar-history__content"
+        role="region"
+        aria-label="Conversation history"
+      >
+        <button
+          class="history-toggle"
+          type="button"
+          :aria-expanded="historyOpen"
+          aria-controls="conversation-history"
+          @click="historyOpen = !historyOpen"
+        >
+          <span>History</span>
+          <span class="history-toggle__chevron" aria-hidden="true">⌄</span>
+        </button>
+
+        <div v-if="historyOpen" id="conversation-history" class="history-list">
+          <p v-if="historySections.length === 0" class="history-empty">No conversations yet</p>
+          <section
+            v-for="section in historySections"
+            :key="section.label"
+            class="history-group"
+            :aria-label="section.label"
+          >
+            <h2>{{ section.label }}</h2>
+            <button
+              v-for="conversation in section.conversations"
+              :key="conversation.id"
+              class="history-item"
+              :class="{ 'history-item--active': conversation.id === activeConversationId }"
+              type="button"
+              :aria-current="conversation.id === activeConversationId ? 'page' : undefined"
+              :title="conversation.title"
+              @click="openConversation(conversation.id)"
+            >
+              {{ conversation.title }}
+            </button>
+          </section>
+        </div>
+      </div>
+    </section>
     <footer
       ref="userCard"
       class="sidebar-user"
@@ -247,9 +319,112 @@ onBeforeUnmount(() => {
 .sidebar-action--compact { width: 52px; justify-content: center; gap: 0; margin: 0 auto; padding: 0; }
 .sidebar-action--compact span { display: none; }
 
-.app-sidebar__spacer {
+.sidebar-history {
+  display: flex;
   min-height: 0;
   flex: 1 1 auto;
+}
+
+.sidebar-history__content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 17px 14px 12px;
+}
+
+.history-toggle {
+  display: flex;
+  width: 100%;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-toggle:hover {
+  color: var(--color-text-strong);
+  background: var(--color-sidebar-hover);
+}
+
+.history-toggle:focus-visible,
+.history-item:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.history-toggle__chevron {
+  font-size: 14px;
+  transition: transform 150ms ease;
+}
+
+.history-toggle[aria-expanded="true"] .history-toggle__chevron {
+  transform: rotate(180deg);
+}
+
+.history-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0 4px;
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.history-empty {
+  margin: 9px 10px;
+  color: var(--color-text-subtle);
+  font-size: 12.5px;
+}
+
+.history-group + .history-group {
+  margin-top: 18px;
+}
+
+.history-group h2 {
+  margin: 0 10px 6px;
+  color: var(--color-text-subtle);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.history-item {
+  display: block;
+  width: 100%;
+  height: 38px;
+  overflow: hidden;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 480;
+  line-height: 38px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.history-item:hover {
+  background: var(--color-sidebar-hover);
+}
+
+.history-item--active {
+  color: var(--color-text-strong);
+  background: #e9edf4;
+  font-weight: 620;
 }
 
 .app-sidebar--collapsed .app-sidebar__primary {
@@ -427,13 +602,18 @@ onBeforeUnmount(() => {
     left: calc(100% + 8px);
     width: min(210px, calc(100vw - 80px));
   }
+
+  .sidebar-history__content {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar,
   .sidebar-collapse-toggle,
   .sidebar-action,
-  .user-card {
+  .user-card,
+  .history-toggle__chevron {
     transition: none;
   }
 }

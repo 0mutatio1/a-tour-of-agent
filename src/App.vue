@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterView } from "vue-router";
 
+import SearchDialog from "./SearchDialog.vue";
 import Sidebar from "./Sidebar.vue";
 import { useUiStore } from "./ui";
 
@@ -14,6 +15,8 @@ const uiStore = useUiStore();
     <main class="app-workspace">
       <RouterView />
     </main>
+
+    <SearchDialog v-if="uiStore.isSearchOpen" />
 
     <Transition name="notice">
       <div v-if="uiStore.notice" class="app-notice" role="status" aria-live="polite">

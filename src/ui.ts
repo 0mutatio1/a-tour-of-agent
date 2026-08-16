@@ -3,12 +3,15 @@ import { defineStore } from "pinia";
 interface UiState {
   sidebarCollapsed: boolean;
   isUserMenuOpen: boolean;
+  isSearchOpen: boolean;
+  highlightedMessageId: string | null;
   notice: string | null;
   dialogResetVersion: number;
 }
 
 const STORAGE_KEY = "agent-chat.ui-preferences.v1";
 let noticeTimeout: number | undefined;
+let highlightTimeout: number | undefined;
 
 function readSidebarCollapsed(): boolean {
   try {
@@ -33,6 +36,8 @@ export const useUiStore = defineStore("ui", {
   state: (): UiState => ({
     sidebarCollapsed: readSidebarCollapsed(),
     isUserMenuOpen: false,
+    isSearchOpen: false,
+    highlightedMessageId: null,
     notice: null,
     dialogResetVersion: 0,
   }),
@@ -51,7 +56,25 @@ export const useUiStore = defineStore("ui", {
     },
     startNewChat(): void {
       this.isUserMenuOpen = false;
+      this.isSearchOpen = false;
       this.dialogResetVersion += 1;
+    },
+    openSearch(): void {
+      this.isUserMenuOpen = false;
+      this.isSearchOpen = true;
+    },
+    closeSearch(): void {
+      this.isSearchOpen = false;
+    },
+    highlightMessage(messageId: string): void {
+      if (highlightTimeout !== undefined) {
+        window.clearTimeout(highlightTimeout);
+      }
+      this.highlightedMessageId = messageId;
+      highlightTimeout = window.setTimeout(() => {
+        this.highlightedMessageId = null;
+        highlightTimeout = undefined;
+      }, 1800);
     },
     toggleUserMenu(): void {
       this.isUserMenuOpen = !this.isUserMenuOpen;

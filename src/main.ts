@@ -12,6 +12,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: "/", name: "new-chat", component: ChatView },
+    { path: "/chat/:conversationId", name: "chat", component: ChatView },
     { path: "/settings", name: "settings", component: SettingsView },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],

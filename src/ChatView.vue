@@ -1,37 +1,68 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 import { streamChat } from "./chat-api";
+import { useChatStore } from "./chat";
 import { renderMarkdown } from "./markdown";
 import { useUiStore } from "./ui";
 
-type Message =
-  | { id: string; role: "user"; content: string }
-  | {
-      id: string;
-      role: "assistant";
-      content: string;
-      thinking: string;
-      thinkingOpen: boolean;
-    };
-type AssistantMessage = Extract<Message, { role: "assistant" }>;
-
+const route = useRoute();
+const router = useRouter();
+const chatStore = useChatStore();
 const uiStore = useUiStore();
-const messages = ref<Message[]>([]);
+const messages = computed(() => chatStore.activeConversation?.messages ?? []);
 const draft = ref("");
-const loading = ref(false);
+const loading = computed(
+  () =>
+    chatStore.activeConversation?.messages.some(
+      (message) =>
+        message.role === "assistant" &&
+        (message.status === "pending" || message.status === "streaming"),
+    ) ?? false,
+);
 const messageList = ref<HTMLElement | null>(null);
 const composerInput = ref<HTMLInputElement | null>(null);
-let activeRequest: AbortController | null = null;
+const openThinkingMessageIds = reactive(new Set<string>());
+
+function startNewConversation(): void {
+  chatStore.startNewConversation();
+}
+
+function toggleThinking(messageId: string): void {
+  if (openThinkingMessageIds.has(messageId)) {
+    openThinkingMessageIds.delete(messageId);
+  } else {
+    openThinkingMessageIds.add(messageId);
+  }
+}
 
 watch(
   () => uiStore.dialogResetVersion,
-  () => {
-    activeRequest?.abort();
-    activeRequest = null;
-    loading.value = false;
-    messages.value = [];
+  startNewConversation,
+);
+
+watch(
+  () => [route.name, route.params.conversationId] as const,
+  ([routeName, conversationId]) => {
+    if (routeName === "new-chat") {
+      startNewConversation();
+      return;
+    }
+    if (routeName !== "chat" || typeof conversationId !== "string") {
+      return;
+    }
+    if (conversationId === chatStore.activeConversationId) {
+      return;
+    }
+
+    if (!chatStore.selectConversation(conversationId)) {
+      chatStore.startNewConversation();
+      uiStore.showNotice("Conversation not found");
+      void router.replace({ name: "new-chat" });
+    }
   },
+  { immediate: true },
 );
 
 async function sendMessage(): Promise<void> {
@@ -41,19 +72,30 @@ async function sendMessage(): Promise<void> {
   }
 
   draft.value = "";
-  const reply = reactive<AssistantMessage>({
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content: "",
-    thinking: "",
-    thinkingOpen: true,
-  });
-  messages.value.push(
-    { id: crypto.randomUUID(), role: "user", content: prompt },
-    reply,
-  );
+  let conversationId = chatStore.activeConversationId;
+  if (conversationId === null) {
+    conversationId = chatStore.createConversation(prompt);
+    if (conversationId === null) {
+      return;
+    }
+    await router.replace({ name: "chat", params: { conversationId } });
+  } else if (chatStore.addUserMessage(conversationId, prompt) === null) {
+    uiStore.showNotice("Conversation not found");
+    startNewConversation();
+    void router.replace({ name: "new-chat" });
+    return;
+  }
 
-  const history = messages.value
+  const assistantMessageId = chatStore.addAssistantMessage(conversationId);
+  if (assistantMessageId === null) {
+    return;
+  }
+  openThinkingMessageIds.add(assistantMessageId);
+
+  const conversation = chatStore.conversations.find(
+    (candidate) => candidate.id === conversationId,
+  );
+  const history = (conversation?.messages ?? [])
     .filter((message) => message.role !== "assistant" || message.content.length > 0)
     .map((message) =>
       message.role === "assistant"
@@ -65,67 +107,93 @@ async function sendMessage(): Promise<void> {
     );
 
   const request = new AbortController();
-  activeRequest = request;
-  loading.value = true;
 
   try {
     for await (const chunk of streamChat(history, request.signal)) {
+      if (request.signal.aborted) {
+        break;
+      }
       if (chunk.type === "thinking") {
-        reply.thinking += chunk.text;
+        chatStore.appendAssistantThinking(conversationId, assistantMessageId, chunk.text);
       } else {
-        reply.content += chunk.text;
+        chatStore.appendAssistantContent(conversationId, assistantMessageId, chunk.text);
       }
       await nextTick();
-      if (chunk.type === "thinking") {
-        const thinkingContent = document.getElementById(`thinking-${reply.id}`);
+      if (
+        chunk.type === "thinking" &&
+        chatStore.activeConversationId === conversationId
+      ) {
+        const thinkingContent = document.getElementById(`thinking-${assistantMessageId}`);
         thinkingContent?.scrollTo({ top: thinkingContent.scrollHeight });
       }
-      messageList.value?.scrollTo({ top: messageList.value.scrollHeight });
+      if (chatStore.activeConversationId === conversationId) {
+        messageList.value?.scrollTo({ top: messageList.value.scrollHeight });
+      }
+    }
+    if (!request.signal.aborted) {
+      chatStore.finishAssistantMessage(conversationId, assistantMessageId, "completed");
     }
   } catch {
-    if (!request.signal.aborted && reply.content.length === 0) {
-      reply.content = "Something went wrong.";
+    if (!request.signal.aborted) {
+      chatStore.finishAssistantMessage(conversationId, assistantMessageId, "failed");
     }
   } finally {
-    reply.thinkingOpen = false;
-    if (activeRequest === request) {
-      activeRequest = null;
-      loading.value = false;
+    openThinkingMessageIds.delete(assistantMessageId);
+    if (chatStore.activeConversationId === conversationId) {
       await nextTick();
       composerInput.value?.focus();
     }
   }
 }
-
-onBeforeUnmount(() => activeRequest?.abort());
 </script>
 
 <template>
   <section class="chat-view" aria-label="Chat dialog">
     <div ref="messageList" class="message-list" role="log" aria-label="Messages">
       <div v-for="message in messages" :key="message.id" class="message-column">
-        <p v-if="message.role === 'user'" class="message message--user">{{ message.content }}</p>
-        <div v-else class="message message--assistant">
+        <p
+          v-if="message.role === 'user'"
+          :id="`message-${message.id}`"
+          class="message message--user"
+          :class="{ 'message--search-match': message.id === uiStore.highlightedMessageId }"
+          tabindex="-1"
+        >
+          {{ message.content }}
+        </p>
+        <div
+          v-else
+          :id="`message-${message.id}`"
+          class="message message--assistant"
+          :class="{ 'message--search-match': message.id === uiStore.highlightedMessageId }"
+          tabindex="-1"
+        >
           <div v-if="message.thinking" class="thinking">
             <button
               class="thinking__toggle"
               type="button"
-              :aria-expanded="message.thinkingOpen"
+              :aria-expanded="openThinkingMessageIds.has(message.id)"
               :aria-controls="`thinking-${message.id}`"
-              @click="message.thinkingOpen = !message.thinkingOpen"
+              @click="toggleThinking(message.id)"
             >
-              <span>{{ message.thinkingOpen ? "Hide thinking" : "Show thinking" }}</span>
+              <span>{{ openThinkingMessageIds.has(message.id) ? "Hide thinking" : "Show thinking" }}</span>
               <span class="thinking__chevron" aria-hidden="true">⌄</span>
             </button>
             <div
-              v-if="message.thinkingOpen"
+              v-if="openThinkingMessageIds.has(message.id)"
               :id="`thinking-${message.id}`"
               class="thinking__content"
               v-html="renderMarkdown(message.thinking)"
             ></div>
           </div>
           <div v-if="message.content" class="answer" v-html="renderMarkdown(message.content)"></div>
-          <div v-else class="answer-loader" role="status" aria-label="Generating answer">
+          <p v-if="message.status === 'stopped'" class="response-status">Response stopped.</p>
+          <p v-else-if="message.status === 'failed'" class="response-status">Something went wrong.</p>
+          <div
+            v-else-if="!message.content"
+            class="answer-loader"
+            role="status"
+            aria-label="Generating answer"
+          >
             <span class="sr-only">Generating answer</span>
             <span aria-hidden="true"></span>
             <span aria-hidden="true"></span>
@@ -150,7 +218,7 @@ onBeforeUnmount(() => activeRequest?.abort());
           @keydown.enter.prevent="sendMessage"
         />
       </form>
-      <p class="composer-disclaimer">It make mistakes. Check important info.</p>
+      <p class="composer-disclaimer">It can make mistakes. Check important info.</p>
     </div>
   </section>
 </template>
@@ -186,6 +254,25 @@ onBeforeUnmount(() => activeRequest?.abort());
   font-size: 15px;
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.message:focus {
+  outline: none;
+}
+
+.message--search-match {
+  animation: message-search-highlight 1800ms ease-out;
+}
+
+@keyframes message-search-highlight {
+  0%,
+  35% {
+    box-shadow: 0 0 0 4px rgb(31 99 243 / 20%);
+  }
+
+  100% {
+    box-shadow: 0 0 0 4px rgb(31 99 243 / 0%);
+  }
 }
 
 .message--user {
@@ -263,6 +350,12 @@ onBeforeUnmount(() => activeRequest?.abort());
   color: var(--color-text-muted);
 }
 
+.response-status {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
 .answer-loader > span:not(.sr-only) {
   width: 6px;
   height: 6px;
@@ -294,6 +387,11 @@ onBeforeUnmount(() => activeRequest?.abort());
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .message--search-match {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(31 99 243 / 18%);
+  }
+
   .answer-loader > span:not(.sr-only) {
     animation: none;
     opacity: 0.65;

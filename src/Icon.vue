@@ -1,6 +1,7 @@
 <script setup lang="ts">
 type AppIconName =
   | "new-chat"
+  | "search"
   | "settings"
   | "logout"
   | "sidebar-collapse"
@@ -35,6 +36,17 @@ withDefaults(
     >
       <path d="M13.4 5H6.75A2.75 2.75 0 0 0 4 7.75v9.5A2.75 2.75 0 0 0 6.75 20h9.5A2.75 2.75 0 0 0 19 17.25V11" />
       <path d="m10 14 1.2-3.55L17.65 4a1.66 1.66 0 1 1 2.35 2.35l-6.45 6.45L10 14Z" />
+    </g>
+
+    <g
+      v-else-if="name === 'search'"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <circle cx="10.7" cy="10.7" r="5.7" />
+      <path d="m15 15 4.2 4.2" />
     </g>
 
     <g
