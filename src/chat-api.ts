@@ -12,7 +12,7 @@ export async function* streamChat(
   messages: Message[],
   signal: AbortSignal,
 ): AsyncGenerator<ChatChunk, void, void> {
-  const response = await fetch("/api/chat", {
+  const response = await fetch("/api/v1/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),

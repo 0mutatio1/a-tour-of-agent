@@ -16,6 +16,9 @@ from openai.types.responses.response_function_tool_call_param import (
 )
 from openai.types.responses.response_input_param import FunctionCallOutput
 
+from .agent import Agent
+from .client import clients, getClient
+
 LOCAL_ALLOWED_ORIGINS = (
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -85,23 +88,12 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-        nonlocal client, model_name
-        api_key = 'sk-dfae6fa3fdb5478282e76aa424986f57' # os.environ.get("OPENAI_API_KEY", "").strip()
-        base_url = 'https://ws-snruzkqql7qx76wo.cn-beijing.maas.aliyuncs.com/compatible-mode/v1' #os.environ.get("OPENAI_BASE_URL", "").strip()
-        configured_model = 'qwen3.7-max' #os.environ.get("OPENAI_MODEL", "").strip()
-        
-        if not api_key or not configured_model:
-            raise RuntimeError("OPENAI_API_KEY and OPENAI_MODEL must be set")
-
-        active_client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
-        client = active_client
-        model_name = configured_model
         try:
             yield
         finally:
-            await active_client.close()
-            client = None
-            model_name = None
+            for active_client in list(clients.values()):
+                await active_client.close()
+            clients.clear()
 
     application = FastAPI(
         title="Minimal OpenAI Stream",
@@ -131,6 +123,11 @@ def create_app() -> FastAPI:
                 raise HTTPException(
                     status_code=422, detail="messages must have role and content"
                 )
+
+        api_key = 'sk-dfae6fa3fdb5478282e76aa424986f57' # os.environ.get("OPENAI_API_KEY", "").strip()
+        base_url = 'https://ws-snruzkqql7qx76wo.cn-beijing.maas.aliyuncs.com/compatible-mode/v1' #os.environ.get("OPENAI_BASE_URL", "").strip()
+        model_name = 'qwen3.7-max' #os.environ.get("OPENAI_MODEL", "").strip()
+        client = getClient(api_key=api_key, base_url=base_url or None)
         if client is None or model_name is None:
             raise HTTPException(status_code=503, detail="OpenAI client is unavailable")
 
@@ -259,7 +256,40 @@ def create_app() -> FastAPI:
             },
         )
 
+
+
+    @application.post("/api/v1/chat")
+    async def chat(
+        messages: Annotated[list[dict[str, str]], Body(embed=True, min_length=1)],
+    ) -> StreamingResponse:
+
+        if not messages:
+            raise HTTPException(status_code=422, detail="messages must not be empty")
+        for message in messages:
+            if message.get("role") not in {"user", "assistant"} or not message.get(
+                "content"
+            ):
+                raise HTTPException(
+                    status_code=422, detail="messages must have role and content"
+                )
+        
+        agent = Agent({"tools": TOOLS})
+
+        return StreamingResponse(
+            agent.runLoop(messages),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Content-Type-Options": "nosniff",
+                "X-Accel-Buffering": "no",
+            },
+        )
+        
+
+
     return application
+
 
 
 app = create_app()
